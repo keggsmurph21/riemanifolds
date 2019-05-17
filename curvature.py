@@ -20,6 +20,7 @@ Example usage:
 import numpy as np
 import sympy
 from string import ascii_letters
+from utils import *
 
 
 def get_symbols(n):
@@ -286,32 +287,40 @@ class Product(RiemannianManifold):
 
 class ImmersedManifold(RiemannianManifold):
 
-    def __init__(self, x, fx):
+    def __init__(self, x, sigma):
 
         self.x = sympy.symbols(x)
         self.dim = len(self.x)
 
-        self.sigma = fx
+        self.sigma = sigma
         self.del_sigma = np.zeros([ len(self.sigma), self.dim ], dtype=sympy.Symbol)
 
-        for (i, coord) in enumerate(self.sigma):
+        for (i, func) in enumerate(self.sigma):
             for (j, var) in enumerate(self.x):
 
-                self.del_sigma[i,j] = sympy.diff( coord, var )
+                self.del_sigma[i,j] = sympy.diff( func, var )
 
         self.G = self.get_metric()
-        print(self.del_sigma)
-        print(self.G)
+        #print(self.del_sigma)
+        #print(self.G)
 
     def g(self, i, j):
 
+        du = self.del_sigma[:, i]
+        dv = self.del_sigma[:, j]
+
+        return np.dot(du, dv)
+
         if i == j:
 
-            expr = 0
-            for coord in self.del_sigma[:, i]:
-                expr += coord * coord
+            du = self.del_sigma[:, i]
+            return np.dot(du, du)
 
-            return expr
+            #expr = 0
+            #for func in self.del_sigma[:, i]:
+            #    expr += func * func
+            #
+            #return expr
 
         return 0
 
@@ -322,8 +331,56 @@ class ImmersedManifold(RiemannianManifold):
 
         return 0
 
+class Surface(ImmersedManifold):
+
+    def __init__(self, x, sigma):
+
+        if len(x.split(' ')) != 2 or len(sigma) != 3:
+            raise ValueError('Surfaces must be maps from R^2 to R^3')
+
+        super(Surface, self).__init__(x, sigma)
+
+        du = self.del_sigma[:, 0]
+        dv = self.del_sigma[:, 1]
+        normal = np.cross(du, dv)
+        self.N = normalize( normal ) # unit normal
+       
+        self.del_del_sigma = np.zeros([ len(self.sigma), self.dim, self.dim ], dtype=sympy.Symbol)
+        for (i, func) in enumerate(self.del_sigma):
+            for (j, f_del_var) in enumerate(func):
+                for (k, var) in enumerate(self.x):
+
+                    self.del_del_sigma[i,j,k] = sympy.diff( f_del_var, var )
+
+        self.I = self.G # first fundamental form
+        self.II = np.zeros([2,2], dtype=sympy.Symbol) # second fundamental form
+
+        for i in range(2):
+            for j in range(2):
+
+                self.II[i,j] = np.dot( self.N, self.del_del_sigma[:,i,j] )
+
+        self.W = matmul( invert(self.I), self.II )
+        print(self.II)
+        print(self.W)
+
+        exit()
+
+        #self.II[0,0] = np.dot( self.N, self.del_del_sigma[:,0,0] )
+        #self.II[0,0] = np.dot(
+        #for i in range(2):
+            #for j in range(2)
+
     def get_gaussian_curvature(self):
-        
+       
+        return det( self.W )
+
+        num = det(self.I)
+        denom = det(self.II)
+
+        return sympy.simplify( num / denom )
+
+        num = self.I[0,0] * self.I[1,1] - self.I[0,1] * self.I
         expr = 1
         for i in range(len(self.x)):
             expr *= self.G[i,i]
@@ -331,6 +388,8 @@ class ImmersedManifold(RiemannianManifold):
         return sympy.simplify( expr )
 
     def get_mean_curvature(self):
+
+        return 0.5 * trace(self.W)
 
         expr = 1
         for i in range(len(self.x)):
@@ -341,21 +400,35 @@ class ImmersedManifold(RiemannianManifold):
 
 if __name__ == '__main__':
 
-    M = ImmersedManifold('x y', ('x', 'y', 'x**2 * y**2'))
+    #M = ImmersedManifold('x y', ('x', 'y', 'x**2 * y**2'))
 
     sinh = sympy.sinh
     cosh = sympy.cosh
     sin = sympy.sin
     cos = sympy.cos
 
-    print()
-    N = ImmersedManifold('u v', (
-        '2*sinh(u)*cos(v) - (2/3)*sinh(3*u)*cos(3*v)',
-        '2*sinh(u)*sin(v) + (2/3)*sinh(3*u)*sin(3*v)',
-        '2*cosh(2*u)*cos(2*v)') )
+    #print()
+    #N = ImmersedManifold('u v', (
+        #'2*sinh(u)*cos(v) - (2/3)*sinh(3*u)*cos(3*v)',
+        #'2*sinh(u)*sin(v) + (2/3)*sinh(3*u)*sin(3*v)',
+        #'2*cosh(2*u)*cos(2*v)') )
+
+    #print()
+    #print(N.get_mean_curvature())
 
     print()
-    print(N.get_mean_curvature())
+
+    S = Surface('x y', ('x', 'y', 'x**2 * y**2'))
+    print(S.del_sigma)
+    print(S.del_del_sigma)
+    print(S.N)
+    print(S.I)
+    print(S.II)
+    print(S.W)
+
+    print()
+    print(S.get_gaussian_curvature())
+    print(S.get_mean_curvature())
 
     print('valid manifolds: R(n), S(n), H(n), Product([ m1 , ... , mk ])')
 
